@@ -30,6 +30,7 @@ PROXY_PORT=${PROXY_PORT:-2375}
 SWARM_PORT=3375
 SHIPYARD_PROTOCOL=http
 SHIPYARD_PORT=${PORT:-8080}
+HOST_SHIPYARD_PORT=${PORT:-8099}
 SHIPYARD_IP=${IP}
 DISCOVERY_BACKEND=etcd
 DISCOVERY_PORT=4001
@@ -238,7 +239,7 @@ start_controller() {
         --name $PREFIX-controller \
         --link $PREFIX-rethinkdb:rethinkdb \
         --link $PREFIX-swarm-manager:swarm \
-        -p $SHIPYARD_PORT:$SHIPYARD_PORT \
+        -p $HOST_SHIPYARD_PORT:$SHIPYARD_PORT \
         --volumes-from=$PREFIX-certs \
         $IMAGE \
         --debug \
