@@ -23,6 +23,7 @@ fi
 ACTION=${ACTION:-deploy}
 IMAGE=${IMAGE:-shipyard/shipyard:latest}
 PREFIX=${PREFIX:-shipyard}
+SUFIX="draw"
 SHIPYARD_ARGS=${SHIPYARD_ARGS:-""}
 TLS_CERT_PATH=${TLS_CERT_PATH:-}
 CERT_PATH="/etc/shipyard"
@@ -97,21 +98,21 @@ start_certs() {
         -ti \
         -d \
         --restart=always \
-        --name $PREFIX-certs \
+        --name $PREFIX-certs-$SUFIX \
         -v $CERT_PATH \
         alpine \
         sh)
     if [ $ENABLE_TLS = 1 ]; then
-        docker cp $LOCAL_SSL_CA_CERT $PREFIX-certs:$SSL_CA_CERT
-        docker cp $LOCAL_SSL_CERT $PREFIX-certs:$SSL_CERT
-        docker cp $LOCAL_SSL_KEY $PREFIX-certs:$SSL_KEY
-        docker cp $LOCAL_SSL_CLIENT_CERT $PREFIX-certs:$SSL_CLIENT_CERT
-        docker cp $LOCAL_SSL_CLIENT_KEY $PREFIX-certs:$SSL_CLIENT_KEY
+        docker cp $LOCAL_SSL_CA_CERT $PREFIX-certs-$SUFIX:$SSL_CA_CERT
+        docker cp $LOCAL_SSL_CERT $PREFIX-certs-$SUFIX:$SSL_CERT
+        docker cp $LOCAL_SSL_KEY $PREFIX-certs-$SUFIX:$SSL_KEY
+        docker cp $LOCAL_SSL_CLIENT_CERT $PREFIX-certs-$SUFIX:$SSL_CLIENT_CERT
+        docker cp $LOCAL_SSL_CLIENT_KEY $PREFIX-certs-$SUFIX:$SSL_CLIENT_KEY
     fi
 }
 
 remove_certs() {
-    docker rm -fv $PREFIX-certs > /dev/null 2>&1
+    docker rm -fv $PREFIX-certs-$SUFIX > /dev/null 2>&1
 }
 
 get_ip() {
@@ -129,12 +130,12 @@ start_discovery() {
         -p 4001:4001 \
         -p 7001:7001 \
         --restart=always \
-        --name $PREFIX-discovery \
+        --name $PREFIX-discovery-$SUFIX \
         microbox/etcd:latest -addr $SHIPYARD_IP:$DISCOVERY_PORT -peer-addr $SHIPYARD_IP:$DISCOVERY_PEER_PORT)
 }
 
 remove_discovery() {
-    docker rm -fv $PREFIX-discovery > /dev/null 2>&1
+    docker rm -fv $PREFIX-discovery-$SUFIX > /dev/null 2>&1
 }
 
 start_rethinkdb() {
@@ -142,12 +143,12 @@ start_rethinkdb() {
         -ti \
         -d \
         --restart=always \
-        --name $PREFIX-rethinkdb \
+        --name $PREFIX-rethinkdb-$SUFIX \
         rethinkdb)
 }
 
 remove_rethinkdb() {
-    docker rm -fv $PREFIX-rethinkdb > /dev/null 2>&1
+    docker rm -fv $PREFIX-rethinkdb-$SUFIX > /dev/null 2>&1
 }
 
 start_proxy() {
@@ -166,15 +167,15 @@ start_proxy() {
         -p $PROXY_PORT:$PROXY_PORT \
         --hostname=$HOSTNAME \
         --restart=always \
-        --name $PREFIX-proxy \
+        --name $PREFIX-proxy-$SUFIX \
         -v /var/run/docker.sock:/var/run/docker.sock \
         -e PORT=$PROXY_PORT \
-        --volumes-from=$PREFIX-certs $TLS_OPTS\
+        --volumes-from=$PREFIX-certs-$SUFIX $TLS_OPTS\
         shipyard/docker-proxy:latest)
 }
 
 remove_proxy() {
-    docker rm -fv $PREFIX-proxy > /dev/null 2>&1
+    docker rm -fv $PREFIX-proxy-$SUFIX > /dev/null 2>&1
 }
 
 start_swarm_manager() {
@@ -189,20 +190,20 @@ start_swarm_manager() {
 
     if [ -z "$DISCOVERY" ]; then
         DISCOVERY="$DISCOVERY_BACKEND://discovery:$DISCOVERY_PORT"
-        EXTRA_RUN_OPTS="--link $PREFIX-discovery:discovery"
+        EXTRA_RUN_OPTS="--link $PREFIX-discovery-$SUFIX:discovery"
     fi
     ID=$(docker run \
         -ti \
         -d \
         --restart=always \
-        --name $PREFIX-swarm-manager \
-        --volumes-from=$PREFIX-certs $EXTRA_RUN_OPTS \
+        --name $PREFIX-swarm-manager-$SUFIX \
+        --volumes-from=$PREFIX-certs-$SUFIX $EXTRA_RUN_OPTS \
         swarm:latest \
         m --replication --addr $SHIPYARD_IP:$SWARM_PORT --host tcp://0.0.0.0:$SWARM_PORT $TLS_OPTS $DISCOVERY)
 }
 
 remove_swarm_manager() {
-    docker rm -fv $PREFIX-swarm-manager > /dev/null 2>&1
+    docker rm -fv $PREFIX-swarm-manager-$SUFIX > /dev/null 2>&1
 }
 
 start_swarm_agent() {
@@ -210,19 +211,19 @@ start_swarm_agent() {
 
     if [ -z "$DISCOVERY" ]; then
         DISCOVERY="$DISCOVERY_BACKEND://discovery:$DISCOVERY_PORT"
-        EXTRA_RUN_OPTS="--link $PREFIX-discovery:discovery"
+        EXTRA_RUN_OPTS="--link $PREFIX-discovery-$SUFIX:discovery"
     fi
     ID=$(docker run \
         -ti \
         -d \
         --restart=always \
-        --name $PREFIX-swarm-agent $EXTRA_RUN_OPTS \
+        --name $PREFIX-swarm-agent-$SUFIX $EXTRA_RUN_OPTS \
         swarm:latest \
         j --addr $SHIPYARD_IP:$PROXY_PORT $DISCOVERY)
 }
 
 remove_swarm_agent() {
-    docker rm -fv $PREFIX-swarm-agent > /dev/null 2>&1
+    docker rm -fv $PREFIX-swarm-agent-$SUFIX > /dev/null 2>&1
 }
 
 start_controller() {
@@ -236,11 +237,11 @@ start_controller() {
         -ti \
         -d \
         --restart=always \
-        --name $PREFIX-controller \
-        --link $PREFIX-rethinkdb:rethinkdb \
-        --link $PREFIX-swarm-manager:swarm \
+        --name $PREFIX-controller-$SUFIX \
+        --link $PREFIX-rethinkdb-$SUFIX:rethinkdb \
+        --link $PREFIX-swarm-manager-$SUFIX:swarm \
         -p $HOST_SHIPYARD_PORT:$SHIPYARD_PORT \
-        --volumes-from=$PREFIX-certs \
+        --volumes-from=$PREFIX-certs-$SUFIX \
         $IMAGE \
         --debug \
         server \
@@ -269,7 +270,7 @@ wait_for_available() {
 }
 
 remove_controller() {
-    docker rm -fv $PREFIX-controller > /dev/null 2>&1
+    docker rm -fv $PREFIX-controller-$SUFIX > /dev/null 2>&1
 }
 
 if [ "$ACTION" = "deploy" ]; then
